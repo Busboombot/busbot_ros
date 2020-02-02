@@ -1,6 +1,3 @@
-[submodule "serial"]
-	path = serial
-	url = https://github.com/wjwwood/serial.git
 [submodule "stepper/CRCpp"]
 	path = stepper/CRCpp
 	url = https://github.com/d-bahr/CRCpp.git
