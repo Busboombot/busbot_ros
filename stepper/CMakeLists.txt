@@ -136,7 +136,7 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 
-add_executable(${PROJECT_NAME}_node src/stepper.cpp)
+add_executable(${PROJECT_NAME}_node src/stepper.cpp src/messages.cpp)
 target_link_libraries(${PROJECT_NAME}_node serial)
 
 

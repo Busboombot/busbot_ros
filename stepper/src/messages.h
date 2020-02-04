@@ -1,11 +1,15 @@
 #pragma once
 
+#include <vector>
 #include "serial/serial.h"
+
+using std::vector;
 
 #define N_AXES 6
 
 enum class CommandCode : uint8_t {
   
+  NONE =    0,
   ACK =     1,
   NACK =    2,
   RUN =     3,
@@ -36,26 +40,32 @@ struct PacketHeader {
 }; 
 
 
-struct AxisHeader {
+// Payload of the move command
+struct Moves {
   uint32_t segment_time = 0; // total segment time, in microseconds // 4
-  uint16_t unused; 
-  uint16_t n_axes = 0; // Number of axes in message
+  int32_t x[N_AXES];
 }; // 8
 
-struct AxisSegment {
-  uint8_t axis_number;
-  int8_t  scale; 
-  uint8_t unused2; 
-  uint8_t unused3; 
-  int32_t steps; // Number of steps to move the axis
+
+struct AxisConfig {
+
+    uint8_t mode;           // STEPDIR, QUAD or PWM
+    uint8_t step_pin;       // Step output, or quadture b
+    uint8_t direction_pin;  // Direction output, or quadrature b
+    uint8_t enable_pin;
+    uint32_t v_max;
+    uint32_t a_max;
 };
 
-struct AxisMove {
-  uint8_t axis_number;
-  uint8_t unused1; 
-  uint8_t unused2; 
-  uint8_t unused3; 
-  int32_t x; // Number of steps to move the axis
+// Main Configuration class, 68 bytes
+struct Config {
+
+    uint8_t n_axes;         // Number of axes
+    uint8_t interrupt_delay;    // How often interrupt is called, in microseconds
+    bool debug_print ;
+    bool debug_tick;
+    
+    AxisConfig axis_config[N_AXES];  // Up to 8 axes
 };
 
 
@@ -71,12 +81,49 @@ struct CurrentState {
 class MessageProcessor {
     
 protected:
-    uint8_t buffer[MESSAGE_BUF_SIZE]; // Outgoing message buffer
     
+    uint8_t data_buf[MESSAGE_BUF_SIZE]; // For composing messages
+    uint8_t send_buf[MESSAGE_BUF_SIZE]; // Encoded and send
+    uint8_t rcv_buf[MESSAGE_BUF_SIZE];  // encoded and recieved
+    
+    uint16_t seq = 0;
+    
+    CommandCode last_code = CommandCode::NONE;
+    int last_ack = 0;
+    int last_done = 0;
+    
+    
+    CurrentState current_state;
+    
+    serial::Serial &ser;
+    
+    void handle(uint8_t* data, size_t len);
     
 public: 
-    MessageProcessor(serial::Serial &ser);
     
+    MessageProcessor(serial::Serial &ser): ser(ser) {}
+
+    size_t send(CommandCode code, const uint8_t* payload, size_t payload_len);
+
+    void sendConfig(Config& config);
+    void sendInfo();
+
+    void sendMove(uint32_t t, vector<int> x);
+    void sendMove(uint32_t t, vector<double> x);
+    void sendMove(vector<int> x);
+    void sendMove(uint32_t t, std::initializer_list<int> il);
+    void sendMove(uint32_t t, std::initializer_list<double> il);
+
+    bool update();
+    bool read_next(float timeout);
+
+    int getLastAck() { return last_ack;}
+    int getLastDone() { return last_done;}
+    int32_t getQueueLength(){return current_state.queue_length;}
+    uint32_t getQueueTime(){return current_state.queue_time;}
+
+    
+   
 };
 
 

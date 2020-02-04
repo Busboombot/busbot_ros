@@ -5,85 +5,83 @@
 #include "messages.h"
 #include <string>
 
-#include "CRC.h"
-#include "serial/serial.h"
-#include "cobs.h"
+
+#include "messages.h"
 
 using std::string;
 using std::exception;
 using std::cout;
 using std::cerr;
 using std::endl;
-using std::vector;
 
 
-PacketHeader h  = { 11,  CommandCode::ECHO, 8 };
+uint32_t a_max = 3e6;
+uint32_t v_max = 10e6;
 
-string sbuffer("\0",256);
+Config config = {
+    N_AXES, // n_axes
+    4, // interrupt_delay
+    false, // debug_print
+    false, // debug_tick
+    
+    {
+        //mode, step, dir, en, v_max, a_max
+        {0, 5,  2,  3, v_max, a_max},
+        {0, 6,  7,  4, v_max, a_max},
+        {0, 8,  9,  10, v_max, a_max},
+        {0, 11, 12, 13, v_max, a_max},
+        {0, 14, 14, 14, v_max, a_max},
+        {0, 14, 14, 14, v_max, a_max}
+       
+        //{0, 14, 15, 16, v_max, a_max},
+        //{0, 17, 18, 19, v_max, a_max}
+    }
+    
+};
 
-CRC::Table<std::uint8_t, 8> table(CRC::CRC_8());
-
-size_t send_echo(serial::Serial &serial, uint16_t seq,  string& str){
-    
-    uint8_t data_buf[256];
-    uint8_t send_buf[256];
-  
-    PacketHeader h  = { seq,  CommandCode::ECHO, 0};
-    
-    memcpy(data_buf, &h, sizeof(PacketHeader));
-    memcpy(data_buf+sizeof(PacketHeader), str.c_str(), str.length());
-    
-    size_t  data_len = sizeof(PacketHeader)+str.length();
-
-    ((PacketHeader* )data_buf)->crc = CRC::Calculate(data_buf,data_len, table);
-
-    size_t l = cobs_encode(data_buf, data_len, send_buf);
-    send_buf[l] = 0;
-    l++;
-    
-    size_t bytes_written = serial.write(send_buf, l);
-    
-    
-    return bytes_written;
-    
+void report(MessageProcessor &mp){
+    cout << "la="<<mp.getLastAck()<<"\tld="<<mp.getLastDone()
+        << "\tql="<<mp.getQueueLength()<<"\tqt="<<mp.getQueueTime()<<endl;
 }
 
 int main(int argc, char **argv) {
     
     uint8_t rcv_buffer[256];
     uint8_t cobs_buffer[256];
-   
+
     string port(argv[1]);
-    string test_string("FOOABR");
-    
+
+    char test_str[] = "FOOABR";
+
     unsigned long  baud = 3e6;
-    
+
     serial::Serial serial(port, baud, serial::Timeout::simpleTimeout(1000));
+    MessageProcessor mp(serial);
+
+    mp.sendInfo();
+  
+    mp.sendConfig(config);
+
+    mp.sendInfo();
     
-    for(int i=0; i < 10; i++){
-        h.seq = i;
-        
-        size_t send_len = send_echo(serial, i,  test_string);
+    for(int i = 0; i < 10; i++){
+        mp.send(CommandCode::ECHO, (const uint8_t*)test_str, strlen(test_str));
 
-        size_t n=0;
-        for(; n<256; n++){
-            serial.read(&rcv_buffer[n], 1);
-            if(rcv_buffer[n] == 0)
-                break;
-        }
+        mp.read_next(1);
 
-        //size_t bytes_read = serial.readline(sbuffer, 256, "\0");
-        size_t bytes_read = n;
-        
-        size_t l2 = cobs_decode(rcv_buffer, bytes_read, (uint8_t*)cobs_buffer);
-        
-        PacketHeader &h = *((PacketHeader*)cobs_buffer);
-        char * payload = ((char*)(cobs_buffer+sizeof(PacketHeader)));
-        
-        cout << "Read: br=" << bytes_read << "\tbd=" << l2 << "\tseq=" << h.seq << "\tcrc=" << (int)h.crc << endl;
-        
     }
+
+    while(mp.read_next(.2));
     
+    
+    mp.sendMove(0,{int(10e3),0});
+    mp.sendMove(0,{int(10e3),int(10e3)});
+    mp.sendMove(0,{int(10e3),0});
+    mp.sendMove(0,{int(10e3),int(10e3)});
+    
+    while(mp.read_next(2)){
+        report(mp);
+    }
     
     
 }
