@@ -21,7 +21,7 @@ CRC::Table<std::uint8_t, 8> table(CRC::CRC_8());
 size_t MessageProcessor::send(CommandCode code, const uint8_t* payload, size_t payload_len){
   
     PacketHeader h  = { seq,  code, 0};
-    
+    printf("A\n");
     memcpy(data_buf, &h, sizeof(PacketHeader));
     size_t  data_len = sizeof(PacketHeader);
         
@@ -29,17 +29,17 @@ size_t MessageProcessor::send(CommandCode code, const uint8_t* payload, size_t p
         memcpy(data_buf+sizeof(PacketHeader), payload, payload_len);
         data_len +=payload_len;
     }
-
+    printf("data_len=%d\n", (int)data_len);
     ((PacketHeader* )data_buf)->crc = CRC::Calculate(data_buf,data_len, table);
 
     size_t l = cobs_encode(data_buf, data_len, send_buf);
     send_buf[l] = 0;
     l++;
-    
+    printf("encode_size=%d\n",(int)l);
     size_t bytes_written = ser.write(send_buf, l);
     
     seq++;
-    
+    printf("bytes_writen=%d\n",(int)bytes_written);
     return bytes_written;
 }
 
@@ -48,11 +48,12 @@ void MessageProcessor::sendInfo(){
     while(read_next(.2));
 }
 
-void MessageProcessor::sendConfig(Config &config){
+/*void MessageProcessor::sendConfig(Config &config){
+    printf("Sending\n");
     send(CommandCode::CONFIG, (const uint8_t*)&config, sizeof(config));
+    printf("Waiting ... ");
     while(read_next(.2));
-}
-
+}*/
 
 void  MessageProcessor::sendMove(uint32_t t, vector<int> x){
     Moves m;
@@ -130,8 +131,9 @@ void MessageProcessor::handle(uint8_t* data, size_t len){
     PacketHeader &h = *((PacketHeader*)data_buf);
     
     // SHould check CRC here. 
-    
+
     char * payload = ((char*)(data_buf+sizeof(PacketHeader)));
+    payload[bytes_decoded-sizeof(PacketHeader)] = '\0'; // In case the payload is a string. 
     
     last_code = h.code;
     
@@ -139,6 +141,7 @@ void MessageProcessor::handle(uint8_t* data, size_t len){
         
         case CommandCode::ACK: 
         last_ack = h.seq;
+        cout << "Ack "<<last_ack<<" ql="<<current_state.queue_length<<endl;
         memcpy((void*)&current_state, payload, sizeof(CurrentState));
         break;
         
@@ -147,6 +150,7 @@ void MessageProcessor::handle(uint8_t* data, size_t len){
         
         case CommandCode::DONE: 
         last_done = h.seq;
+        cout << "Done "<<last_done<<" ql="<<current_state.queue_length<<endl;
         memcpy((void*)&current_state, payload, sizeof(CurrentState));
         break;
         
@@ -155,6 +159,9 @@ void MessageProcessor::handle(uint8_t* data, size_t len){
         cout << payload << endl;
         break;
         
+        case CommandCode::ECHO:
+        cout << "ECHO "<< payload << endl; 
+        break;
         
     }
     
