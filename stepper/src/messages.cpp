@@ -48,12 +48,27 @@ void MessageProcessor::sendInfo(){
     while(read_next(.2));
 }
 
-/*void MessageProcessor::sendConfig(Config &config){
-    printf("Sending\n");
-    send(CommandCode::CONFIG, (const uint8_t*)&config, sizeof(config));
-    printf("Waiting ... ");
+void MessageProcessor::sendConfig(const Config &config, std::vector<AxisConfig> axis_config){
+    
+    sendConfig(config);
+
+    for(const AxisConfig &as : axis_config){
+        sendAxisConfig(as);
+    }
+
     while(read_next(.2));
-}*/
+}
+
+void MessageProcessor::sendConfig(const Config &config){
+    send(CommandCode::CONFIG, (const uint8_t*)&config, sizeof(config));
+    while(read_next(.2));
+}
+
+void MessageProcessor::sendAxisConfig(const AxisConfig &axis_config){
+    send(CommandCode::AXES, (const uint8_t*)&axis_config, sizeof(axis_config));
+    while(read_next(.2));
+}
+
 
 void  MessageProcessor::sendMove(uint32_t t, vector<int> x){
     Moves m;

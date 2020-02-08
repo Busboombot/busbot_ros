@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   serial
   std_msgs
+  sensor_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -106,7 +107,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
 #  INCLUDE_DIRS include
   LIBRARIES stepper
-  CATKIN_DEPENDS roscpp rospy serial std_msgs
+  CATKIN_DEPENDS roscpp rospy serial std_msgs sensor_msgs
 #  DEPENDS system_lib
 )
 
@@ -137,7 +138,7 @@ include_directories(
 ## The recommended prefix ensures that target names across packages don't collide
 
 add_executable(${PROJECT_NAME}_node src/stepper.cpp src/messages.cpp)
-target_link_libraries(${PROJECT_NAME}_node serial )
+target_link_libraries(${PROJECT_NAME}_node serial ${catkin_LIBRARIES}  )
 
 
 add_executable(${PROJECT_NAME}_example src/serial_example.cc)

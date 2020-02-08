@@ -20,10 +20,10 @@ enum class CommandCode : uint8_t {
   ECHO  =   8,  // Echo the incomming header
   NOOP  =   9,  // Does nothing, but get ACKED
   CONFIG =  10, // Reset the configuration
-  INFO   =  11,
-  EMPTY  =  12, // Queue is empty, nothing to do. 
-  POSITIONS=19,  // Position report. 
-  
+  AXES   =  11,
+  INFO   =  12,
+  EMPTY  =  13, // Queue is empty, nothing to do. 
+
   DONE =    20,  // A Movemenbt comment is finished
   MOVE =    21  // A movement segment, with just the relative distance.   
 
@@ -54,6 +54,32 @@ struct CurrentState {
   
 }; 
 
+// Main Configuration class, 68 bytes
+struct Config {
+
+    uint8_t n_axes;         // Number of axes
+    uint8_t interrupt_delay;    // How often interrupt is called, in microseconds
+    bool debug_print;
+    bool debug_tick;
+
+    Config():
+      n_axes(0), interrupt_delay(5), debug_print(false), debug_tick(false){}
+
+    Config(uint8_t n_axes,uint8_t interrupt_delay,bool debug_print,bool debug_tick):
+      n_axes(n_axes), interrupt_delay(interrupt_delay), debug_print(debug_print), debug_tick(debug_tick){}
+
+};
+
+struct AxisConfig {
+    uint8_t axis;           // Axis number
+    uint8_t step_pin;       // Step output, or quadture b
+    uint8_t direction_pin;  // Direction output, or quadrature b
+    uint8_t enable_pin;
+    uint32_t v_max;
+    uint32_t a_max;
+};
+
+
 #define MESSAGE_BUF_SIZE 256
 
 class MessageProcessor {
@@ -83,7 +109,11 @@ public:
 
     size_t send(CommandCode code, const uint8_t* payload, size_t payload_len);
 
-    //void sendConfig(Config& config);
+
+    void sendConfig(const Config& config, std::vector<AxisConfig> axis_config);
+    void sendConfig(const Config& config);
+    void sendAxisConfig(const AxisConfig &axis_config);
+
     void sendInfo();
 
     void sendMove(uint32_t t, vector<int> x);
