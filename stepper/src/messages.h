@@ -51,8 +51,9 @@ struct CurrentState {
   int32_t queue_length = 0;
   uint32_t queue_time = 0;
   int32_t positions[N_AXES] = {0};
-  
+  int32_t planner_positions[N_AXES] = {0};
 }; 
+
 
 // Main Configuration class, 68 bytes
 struct Config {
@@ -82,6 +83,26 @@ struct AxisConfig {
 
 #define MESSAGE_BUF_SIZE 256
 
+class MessageProcessor;
+
+class MessagePubHelper {
+
+protected:
+    
+    MessageProcessor *mp;
+    
+public:
+    
+    void setMessageProcessor(MessageProcessor* mp){ this->mp=mp;}
+    
+    virtual void publish(PacketHeader &h, CurrentState &current_state) = 0;
+    
+    virtual void publish(PacketHeader &h) = 0;
+    
+
+};
+
+
 class MessageProcessor {
     
 protected:
@@ -90,16 +111,19 @@ protected:
     uint8_t send_buf[MESSAGE_BUF_SIZE]; // Encoded and send
     uint8_t rcv_buf[MESSAGE_BUF_SIZE];  // encoded and recieved
     
-    uint16_t seq = 0;
+    uint16_t seq = 0; // outgoing seq
     
     CommandCode last_code = CommandCode::NONE;
     int last_ack = 0;
     int last_done = 0;
+    int last_seq = 0;
     
     
     CurrentState current_state;
     
     serial::Serial &ser;
+
+    MessagePubHelper *mph=0;
     
     void handle(uint8_t* data, size_t len);
     
@@ -107,6 +131,12 @@ public:
     
     MessageProcessor(serial::Serial &ser): ser(ser) {}
 
+    void setMPH(MessagePubHelper *mph){ 
+        this->mph = mph;
+        mph->setMessageProcessor(this);
+        
+    }
+    
     size_t send(CommandCode code, const uint8_t* payload, size_t payload_len);
 
 
@@ -123,15 +153,29 @@ public:
     void sendMove(uint32_t t, std::initializer_list<double> il);
 
     bool update();
-    bool read_next(float timeout);
+    bool read_next(float timeout = .1);
+    bool read_while_qt(float qt, float timeout);
+    bool read_while_ql(int ql, float timeout);
+
+    bool waitReadable(){ return ser.waitReadable(); }
 
     int getLastAck() { return last_ack;}
     int getLastDone() { return last_done;}
+    int getLastSeq() {return last_seq;}
+    CommandCode getLastCode() { return last_code;}
     int32_t getQueueLength(){return current_state.queue_length;}
-    uint32_t getQueueTime(){return current_state.queue_time;}
+    float getQueueTime(){return (float)current_state.queue_time/ (float)1e6;}
 
-    
+    std::vector<int32_t> getPositions(){ 
+      return std::vector<int32_t>(current_state.positions, current_state.positions+N_AXES);
+    }
    
+    std::vector<int32_t> getPlannerPositions(){ 
+      return std::vector<int32_t>(current_state.planner_positions, current_state.planner_positions+N_AXES);
+    }
 };
+
+
+
 
 

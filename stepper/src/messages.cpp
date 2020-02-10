@@ -14,6 +14,7 @@ using std::cout;
 using std::cerr;
 using std::endl;
 using std::vector;
+using namespace std::chrono;
 
 CRC::Table<std::uint8_t, 8> table(CRC::CRC_8());
 
@@ -21,7 +22,7 @@ CRC::Table<std::uint8_t, 8> table(CRC::CRC_8());
 size_t MessageProcessor::send(CommandCode code, const uint8_t* payload, size_t payload_len){
   
     PacketHeader h  = { seq,  code, 0};
-    printf("A\n");
+
     memcpy(data_buf, &h, sizeof(PacketHeader));
     size_t  data_len = sizeof(PacketHeader);
         
@@ -29,17 +30,17 @@ size_t MessageProcessor::send(CommandCode code, const uint8_t* payload, size_t p
         memcpy(data_buf+sizeof(PacketHeader), payload, payload_len);
         data_len +=payload_len;
     }
-    printf("data_len=%d\n", (int)data_len);
+
     ((PacketHeader* )data_buf)->crc = CRC::Calculate(data_buf,data_len, table);
 
     size_t l = cobs_encode(data_buf, data_len, send_buf);
     send_buf[l] = 0;
     l++;
-    printf("encode_size=%d\n",(int)l);
+
     size_t bytes_written = ser.write(send_buf, l);
     
     seq++;
-    printf("bytes_writen=%d\n",(int)bytes_written);
+   
     return bytes_written;
 }
 
@@ -80,6 +81,10 @@ void  MessageProcessor::sendMove(uint32_t t, vector<int> x){
             m.x[i++] = xi;   
     
     send(CommandCode::MOVE, (const uint8_t*)&m, sizeof(m));
+    //read_next();
+
+    current_state.queue_length += 3;
+
 }
 
 void  MessageProcessor::sendMove(uint32_t t, vector<double> x){
@@ -119,9 +124,7 @@ bool MessageProcessor::update(){
     return false;
 }
 
-bool MessageProcessor::read_next(float timeout = .1){
-    
-    using namespace std::chrono;
+bool MessageProcessor::read_next(float timeout){
     
     auto t1 = steady_clock::now();
     
@@ -129,8 +132,7 @@ bool MessageProcessor::read_next(float timeout = .1){
         if(update())
             return true;
         
-        auto t2 = steady_clock::now();
-        auto ts = duration_cast<duration<double>>(t2 - t1).count();
+        auto ts = duration_cast<duration<double>>(steady_clock::now() - t1).count();
         
         if(ts > timeout){
             return false;
@@ -138,6 +140,29 @@ bool MessageProcessor::read_next(float timeout = .1){
     }
 }
 
+// Read loop until the queue time is below a given value. 
+bool MessageProcessor::read_while_qt(float qt, float timeout = 5){
+    
+    if(!read_next(timeout))
+        return false;
+
+    if (getQueueTime() < qt)
+        return false;
+
+    return true;
+}
+
+// Read while the queue size is larger than given value 
+bool MessageProcessor::read_while_ql(int ql, float timeout = 2){
+    
+    if(!read_next(timeout))
+        return false;
+
+    if (getQueueLength() < ql)
+        return false;
+
+    return true;
+}
 
 void MessageProcessor::handle(uint8_t* data, size_t len){
     
@@ -151,32 +176,36 @@ void MessageProcessor::handle(uint8_t* data, size_t len){
     payload[bytes_decoded-sizeof(PacketHeader)] = '\0'; // In case the payload is a string. 
     
     last_code = h.code;
+    last_seq = h.seq;
     
     switch(h.code){
         
         case CommandCode::ACK: 
-        last_ack = h.seq;
-        cout << "Ack "<<last_ack<<" ql="<<current_state.queue_length<<endl;
-        memcpy((void*)&current_state, payload, sizeof(CurrentState));
-        break;
-        
-        case CommandCode::NACK: 
-        break;
+            last_ack = h.seq;
+            memcpy((void*)&current_state, payload, sizeof(CurrentState));
+            if(mph)
+                mph->publish(h, current_state);
+            break;
         
         case CommandCode::DONE: 
-        last_done = h.seq;
-        cout << "Done "<<last_done<<" ql="<<current_state.queue_length<<endl;
-        memcpy((void*)&current_state, payload, sizeof(CurrentState));
-        break;
+            last_done = h.seq;
+        case CommandCode::EMPTY: 
+            memcpy((void*)&current_state, payload, sizeof(CurrentState));
+            if(mph)
+                mph->publish(h, current_state);
+
+       
+        case CommandCode::NACK: 
+            break;
         
         case CommandCode::ERROR: 
         case CommandCode::MESSAGE: 
-        cout << payload << endl;
-        break;
+            cout << payload << endl;
+            break;
         
         case CommandCode::ECHO:
-        cout << "ECHO "<< payload << endl; 
-        break;
+            cout << "ECHO "<< payload << endl; 
+            break;
         
     }
     
