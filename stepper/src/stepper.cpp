@@ -75,7 +75,7 @@ void report(MessageProcessor &mp){
         ss << " " << setw(5) << i;
 
     //cout << ss.str() << endl;
-    ROS_DEBUG_NAMED("stepper", "%s", ss.str().c_str());
+    ROS_DEBUG_NAMED("move", "%s", ss.str().c_str());
     
 }
 
@@ -199,9 +199,8 @@ public:
           
         }
 
-        
         cout << ss.str().c_str() << endl; 
-        ROS_DEBUG_NAMED("stepper", "MOVE: %s", ss.str().c_str());
+        ROS_DEBUG_NAMED("move", "MOVE: %s", ss.str().c_str());
         //mp.read_next(0.01);
     }
 };
@@ -310,7 +309,7 @@ int main(int argc, char **argv) {
 
     //mp.sendInfo();
     
-
+    ROS_INFO("Starting");
     
     while (ros::ok()){
         if(mp.waitReadable())
