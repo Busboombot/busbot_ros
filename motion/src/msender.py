@@ -5,8 +5,6 @@ import rospy
 from stepper.msg import MoveCommand
 from random import randint
     
-dt = .1 # Length of segments, in seconds
-    
 def send_motion():
     
     v_max =  rospy.get_param("/stepper/v_max")
@@ -18,21 +16,19 @@ def send_motion():
     rate = rospy.Rate(5) # 10hz
 
     i = 0;
-    l = [0, 1500, 1000, -2000,1000, -500, 0]
+    l = [200000, 0]
     while not rospy.is_shutdown():
         rate.sleep()
-        x = [ l[(i+j)%len(l)]*10 for j in range(6) ]
+        x = [ l[i%len(l)]for j in range(6) ]
         print(i, x)
-        m = MoveCommand(movetype=MoveCommand.ABSOLUTE, t=.1, x=x)
+        m = MoveCommand(movetype=MoveCommand.ABSOLUTE, t=0, x=x)
         pub.publish(m)
         
         i += 1
-        if(i == len(l)*2):
+        if(i == len(l)):
             rospy.signal_shutdown("")
             break
 
-        
-        
 if __name__ == '__main__':
     try:
         send_motion()

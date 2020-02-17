@@ -2,8 +2,11 @@
 #include <iostream>
 #include <cstdio>
 #include <unistd.h>
-#include "messages.h"
+#include <chrono>
 #include <string>
+#include <math.h>  
+    
+#include "messages.h"
 #include <ros/console.h>
 
 #include "ros/ros.h"
@@ -16,6 +19,8 @@
 
 #include "messages.h"
 
+using namespace std::chrono;
+
 using std::string;
 using std::exception;
 using std::cout;
@@ -27,6 +32,16 @@ using std::left;
 
 uint32_t a_max = 3e6;
 uint32_t v_max = 10e6;
+
+long ms(){
+    
+    ros::Time t = ros::Time::now();
+    
+    double ms1 = ((double)t.sec)*1000.;
+    double ms2 = ((double)t.nsec)/1000000.;
+    
+    return (long)round(ms1+ms2);
+}
 
 void report(MessageProcessor &mp){
 
@@ -64,19 +79,31 @@ void report(MessageProcessor &mp){
     
 }
 
+#define SAVE_INTERVAL 3 // Frequencty of saving position data, in seconds. 
 
 // Publish update messages. 
 class Publisher: public MessagePubHelper {
 
 protected:
     
-    ros::Publisher pub;
+    ros::Publisher *pub;
+
+    ros::NodeHandle &nh;
+
+    ros::Timer saveTimer;
+
+    stepper::PositionReport last_pr;
 
 public:
 
-    Publisher(){}    
+    Publisher(ros::NodeHandle &nh):
+        nh(nh),
+        saveTimer(nh.createTimer(ros::Duration(SAVE_INTERVAL), &Publisher::save, this, true, false))
+    {
+        
+    }    
 
-    void setPub(ros::Publisher pub){ this->pub = pub;}
+    void setPub(ros::Publisher &pub){ this->pub = &pub;}
     
     void publish(PacketHeader &h, CurrentState& current_state){
         
@@ -99,7 +126,28 @@ public:
             case CommandCode::EMPTY:  pr.code = stepper::PositionReport::EMPTY; break;
         }
         
-        pub.publish(pr);
+        last_pr = pr;
+
+        if(!saveTimer.hasStarted())
+            saveTimer.start();
+        //saveTimer.setDuration()
+
+        pub->publish(pr);
+
+    }
+
+    void save(const ros::TimerEvent& event){
+
+        std::string key; 
+
+        saveTimer.stop();
+        cout << "Saving" << endl;
+      
+        for(int axis = 0; axis < N_AXES; axis++){
+            key = std::string("position/")+std::to_string(axis);
+            nh.setParam(key,last_pr.positions[axis]);
+        }
+           
     }
     
     void publish(PacketHeader &h){}
@@ -111,36 +159,50 @@ class Listener {
 protected:
     
     MessageProcessor mp;
+    long start_time;
+    long last_time;
 
 public:
 
-    Listener(MessageProcessor &mp):mp(mp){}
-
+    Listener(MessageProcessor &mp):mp(mp),start_time(ms()), last_time(ms()){
+        
+    }
 
     void callback(const stepper::MoveCommand::ConstPtr& msg){
         
         std::stringstream ss;
-        
         vector<int> x;
+
+        if(msg->movetype == stepper::MoveCommand::JOG && ms()-last_time < 100){
+            return;
+        }
 
         ss << msg->t << ": ";
         for(int i = 0; i < N_AXES; i++){
-            if (msg->movetype == stepper::MoveCommand::ABSOLUTE){
-                //cout << "(" << mp.getPlannerPositions()[i] << ")";
-                x.push_back(msg->x[i] - mp.getPlannerPositions()[i]);
-            } else {
-                x.push_back(msg->x[i]);
-            }
+             x.push_back(msg->x[i]);
         }
 
         for(int xi: x)
             ss << xi << " ";
+      
+        if (msg->movetype == stepper::MoveCommand::ABSOLUTE){
+            mp.aMove(x);       
+            cout << "AMOVE: " ;
+        } else if (msg->movetype == stepper::MoveCommand::RELATIVE){
+            mp.rMove(x);
+            cout << "RMOVE: ";
+        } else {           
+            cout << ms() - last_time << " ";
+            last_time = ms();
+            cout << "JOG: ";
+            mp.jog(msg->t*1000000, x);
+          
+        }
 
-        cout << "MOVE: " << ss.str().c_str() << endl; 
-        ROS_DEBUG_NAMED("stepper", "MOVE: %s", ss.str().c_str());
         
-        mp.sendMove(x);
-        mp.read_next(0.01);
+        cout << ss.str().c_str() << endl; 
+        ROS_DEBUG_NAMED("stepper", "MOVE: %s", ss.str().c_str());
+        //mp.read_next(0.01);
     }
 };
 
@@ -214,9 +276,9 @@ int main(int argc, char **argv) {
 
     cout << " port=" << port << " baud=" << baud << endl;
     
-    serial::Serial serial(port, baud, serial::Timeout::simpleTimeout(200));
+    serial::Serial serial(port, baud, serial::Timeout::simpleTimeout(100));
     
-    Publisher publisher;
+    Publisher publisher(nh);
     
     MessageProcessor mp(serial);
     mp.setMPH(&publisher);
@@ -232,10 +294,13 @@ int main(int argc, char **argv) {
 
     //mp.sendInfo();
     
+
+    
     while (ros::ok()){
         if(mp.waitReadable())
-            mp.read_next(0.05);
+            while(mp.read_next(0.01));
       ros::spinOnce();
+      
     }
 
 

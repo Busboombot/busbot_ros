@@ -3,9 +3,9 @@
 #include "messages.h"
 #include "cobs.h" 
 
+#include <chrono>
 #include <iostream>
 #include <cstdio>
-#include <chrono>
 #include <algorithm>    // std::copy
 
 using std::string;
@@ -14,7 +14,8 @@ using std::cout;
 using std::cerr;
 using std::endl;
 using std::vector;
-using namespace std::chrono;
+
+
 
 CRC::Table<std::uint8_t, 8> table(CRC::CRC_8());
 
@@ -71,40 +72,42 @@ void MessageProcessor::sendAxisConfig(const AxisConfig &axis_config){
 }
 
 
-void  MessageProcessor::sendMove(uint32_t t, vector<int> x){
+void  MessageProcessor::sendMove(CommandCode code, uint32_t t, vector<int> x){
     Moves m;
     m.segment_time = t;
-     
+    
     int i = 0;
     for( auto xi : x)
         if(i < N_AXES)
             m.x[i++] = xi;   
     
-    send(CommandCode::MOVE, (const uint8_t*)&m, sizeof(m));
-    //read_next();
+    send(code, (const uint8_t*)&m, sizeof(m));
 
     current_state.queue_length += 3;
-
 }
 
-void  MessageProcessor::sendMove(uint32_t t, vector<double> x){
+void  MessageProcessor::sendMove(CommandCode code, uint32_t t, vector<double> x){
     vector<int> vi;
     std::copy(x.begin(), x.end(), vi.begin());
-    sendMove(t, vi);
+    sendMove(code, t, vi);
 }
 
-void  MessageProcessor::sendMove(vector<int> x) {
-    sendMove(0,x);
+void  MessageProcessor::sendMove(CommandCode code, vector<int> x) {
+    sendMove(code, 0,x);
 
 }
-void  MessageProcessor::sendMove(uint32_t t, std::initializer_list<int> il){
-    sendMove(t, vector<int>(il.begin(), il.end()));
+void  MessageProcessor::sendMove(CommandCode code, uint32_t t, std::initializer_list<int> il){
+    sendMove(code, t, vector<int>(il.begin(), il.end()));
 }
-void  MessageProcessor::sendMove(uint32_t t, std::initializer_list<double> il){
+void  MessageProcessor::sendMove(CommandCode code, uint32_t t, std::initializer_list<double> il){
     vector<int> vi;
     std::copy(il.begin(), il.end(), vi.begin());
-    sendMove(t, vi);
+    sendMove(code, t, vi);
 }
+
+void  MessageProcessor::aMove(vector<int> x){ sendMove(CommandCode::AMOVE, 0, x); }
+void  MessageProcessor::rMove(vector<int> x){ sendMove(CommandCode::RMOVE, 0, x); }
+void  MessageProcessor::jog(uint32_t t, vector<int> x){ sendMove(CommandCode::JMOVE, t, x); }
 
 
 bool MessageProcessor::update(){
@@ -125,14 +128,14 @@ bool MessageProcessor::update(){
 }
 
 bool MessageProcessor::read_next(float timeout){
-    
-    auto t1 = steady_clock::now();
+
+    auto t1 = std::chrono::steady_clock::now();
     
     while(true){
         if(update())
             return true;
         
-        auto ts = duration_cast<duration<double>>(steady_clock::now() - t1).count();
+        auto ts = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - t1).count();
         
         if(ts > timeout){
             return false;

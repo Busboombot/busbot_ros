@@ -1,5 +1,6 @@
 int8 ABSOLUTE=1
 int8 RELATIVE=2 
+int8 JOG=3
 
 Header header
 int8 movetype

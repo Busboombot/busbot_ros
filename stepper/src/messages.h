@@ -25,7 +25,9 @@ enum class CommandCode : uint8_t {
   EMPTY  =  13, // Queue is empty, nothing to do. 
 
   DONE =    20,  // A Movemenbt comment is finished
-  MOVE =    21  // A movement segment, with just the relative distance.   
+  RMOVE =   21,  // A relative movement segment, with just the relative distance.   
+  AMOVE =   22,  // An absolute movement
+  JMOVE =   23   // A Jog movement. 
 
 };
 
@@ -146,11 +148,15 @@ public:
 
     void sendInfo();
 
-    void sendMove(uint32_t t, vector<int> x);
-    void sendMove(uint32_t t, vector<double> x);
-    void sendMove(vector<int> x);
-    void sendMove(uint32_t t, std::initializer_list<int> il);
-    void sendMove(uint32_t t, std::initializer_list<double> il);
+    void sendMove(CommandCode code, uint32_t t, vector<int> x);
+    void sendMove(CommandCode code, uint32_t t, vector<double> x);
+    void sendMove(CommandCode code, vector<int> x);
+    void sendMove(CommandCode code, uint32_t t, std::initializer_list<int> il);
+    void sendMove(CommandCode code, uint32_t t, std::initializer_list<double> il);
+
+    void  aMove(vector<int> x);
+    void  rMove(vector<int> x);
+    void  jog(uint32_t t, vector<int> x);
 
     bool update();
     bool read_next(float timeout = .1);
