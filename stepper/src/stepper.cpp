@@ -267,6 +267,7 @@ void config(ros::NodeHandle &nh,  MessageProcessor &mp){
 int main(int argc, char **argv) {
     string port;
     int baud;
+    bool show_error = true;
 
     ros::init(argc, argv, "stepper");
     ros::NodeHandle nh("stepper");
@@ -283,11 +284,15 @@ int main(int argc, char **argv) {
             serial = new serial::Serial(port, baud, serial::Timeout::simpleTimeout(100));
             break;
         } catch (serial::IOException &e) {
-            cout << "Failed to open serial port (" << port <<"). Will try every second. " << endl;
-            cout << "Exception: " << e.what();
+            if(show_error){
+                ROS_ERROR_STREAM("Failed to open serial port (" << port <<"). Will try every second. ");
+                ROS_ERROR_STREAM("Exception: " << e.what());
+                show_error = false;
+            }
             ros::Duration(1).sleep();
         }
     }
+    
     
     Publisher publisher(nh);
     
