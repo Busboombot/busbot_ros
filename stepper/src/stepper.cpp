@@ -276,11 +276,22 @@ int main(int argc, char **argv) {
 
     cout << " port=" << port << " baud=" << baud << endl;
     
-    serial::Serial serial(port, baud, serial::Timeout::simpleTimeout(100));
+    serial::Serial *serial;
+    
+    while (true){
+        try {
+            serial = new serial::Serial(port, baud, serial::Timeout::simpleTimeout(100));
+            break;
+        } catch (serial::IOException &e) {
+            cout << "Failed to open serial port (" << port <<"). Will try every second. " << endl;
+            cout << "Exception: " << e.what();
+            ros::Duration(1).sleep();
+        }
+    }
     
     Publisher publisher(nh);
     
-    MessageProcessor mp(serial);
+    MessageProcessor mp(*serial);
     mp.setMPH(&publisher);
     
     Listener listener(mp);
