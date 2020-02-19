@@ -7,6 +7,6 @@
   
   <node name="joy_motion" pkg="motion" type="joy_motion.py" respawn="true" />
 
-  <rosparam command="load" file="$(find stepper)/config.yaml" />
+  <rosparam command="load" file="$(find idxrobot)/config.yaml" />
   
 </launch>
